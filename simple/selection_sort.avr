@@ -1,0 +1,104 @@
+.section .data
+array: .byte 64, 23, 14, 29, 40, 10
+len_array: .byte 6
+
+.section .text
+.global asm_function
+
+asm_function: ;;prepping the stack
+	ldi r18, hi8(array)
+	push r18
+	ldi r18, lo8(array)
+	push r18
+	lds r18, len_array
+	push r18
+	call selection_sort
+	;; 3 push so 3 pop out. 
+	pop r18
+	pop r18
+	pop r18
+	ret
+
+selection_sort:
+	in r30, 0x3d ;; Z = SP
+	in r31, 0x3e
+	ldd r20, Z+3 ;; r20 always store n
+	ldd r26, Z+4  ;; loading X to be lo8(array)
+	ldd r27, Z+5 
+	clr r23 ;; setting a 0 register for list iteration in loop
+	mov r19, r20
+	dec r19		;; n-1
+	clr r16   ;; setting r16 = i = 0 for outer loop
+
+
+outer: ;; for i in range n-1
+	cp r16, r19
+	brsh done
+	mov r17, r16
+	mov r18, r16
+	inc 17 ;; r17 = i + 1 for inner loop
+
+
+inner: ;; for j in range (i+1, n)	
+	cp r17, r20 ;; end condition for loop, r17= j
+	brsh inner_done
+	;; loading arr[j]
+	mov r28, r26 	;; Y now points to array for getting j
+	mov r29, r27
+	add r28, r17
+	adc r29, r23 ;; preserving hi8(Y)
+	ld r21, Y
+
+	;; loading arr[min_index]	
+	mov r28, r26 	;; Y now points to array for getting min index
+	mov r29, r27
+	add r28, r18
+	adc r29, r23
+	ld r22, Y
+
+	;; if arr[j] <= arr[min_index] -> assign new index
+	cp r21, r22
+	brsh no_new_min
+	mov r18, r17 ;; min index now stores j 
+
+no_new_min:
+	inc r17
+	rjmp inner
+			
+
+inner_done: 
+	cp r18, r16	
+	breq no_swap 	;; if min_index != i
+
+	mov r28, r26 	;; Y = arr[i]
+	mov r29, r27
+	add r28, r16
+	adc r29, r23
+	ld r21, Y	;; r21 = arr[i] (temp)
+
+	mov  r28, r26       ; Y = arr[min_index]
+	mov  r29, r27
+	add  r28, r18
+	adc  r29, r23
+	ld   r22, Y         ; r22 = arr[min_index]
+
+	st Y, r21
+
+	mov  r28, r26       ; Y = arr[min_index]
+	mov  r29, r27
+	add  r28, r16
+	adc  r29, r23
+
+	st Y, r22
+	
+
+no_swap:
+	inc r16
+	rjmp outer
+	
+
+done:
+    ret
+.end
+
+

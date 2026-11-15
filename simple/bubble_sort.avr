@@ -1,0 +1,87 @@
+.section .data
+
+array: .byte  4,2,6,4,2,6,8,10,5, 28
+array_len: .byte 10
+
+.section .text
+.global asm_function
+
+asm_function:
+	ldi r18, hi8(array)
+	push r18
+	ldi r18, lo8(array)
+	push r18
+	lds r18, array_len
+	push r18
+	call bubble_sort
+	pop r18
+	pop r18
+	pop r18
+	ret
+
+bubble_sort:
+	in r30, 0x3d 	;; Z -> SP
+	in r31, 0x3e
+	ldd r20, Z+3 	;; r23 stores array_len
+	ldd r26, Z+4 	;; X -> array address
+	ldd r27, Z+5
+	clr r16 	;; stores i
+	clr r23 	;; used to index array
+
+outer:
+	mov r21, r20
+	dec r21		;; r21 = n - 1
+	cp r16, r21 	;; for i in range n-1
+	brsh done
+	clr r17		;; r17 stores j
+	
+inner:
+	mov r22, r21
+	sub r22, r16 	;; r22 = n-i-1
+	cp r17, r22
+	brsh inner_done
+
+	mov r28, r26
+	mov r29, r27 	;; Y -> array
+	add r28, r17
+	adc r29, r23 	;; Y -> array[j]
+	ld r18, Y	;; r18 stores array[j]
+
+	mov r28, r26
+	mov r29, r27 	;; Y -> array
+	add r28, r17
+	adc r29, r23 	;; 
+	ldd r19, Y+1	;; r19 stores array[j+1]
+
+	cp r19, r18  	;; reverse the order to desc sort
+	brlo swap
+	inc r17
+	rjmp inner
+
+swap:
+	mov r28, r26
+	mov r29, r27 	;; Y -> array
+	add r28, r17
+	adc r29, r23 	;; Y -> array[j]
+	st Y, r19	;; r18 stores array[j]
+
+	mov r28, r26
+	mov r29, r27 	;; Y -> array
+	add r28, r17
+	inc r28
+	adc r29, r23 	;; Y -> array[j+1]
+	st Y, r18	;; r19 stores array[j+1]
+	
+	inc r17
+	rjmp inner
+	
+inner_done:
+	inc r16
+	rjmp outer
+	
+done:
+	ret
+
+.end
+
+

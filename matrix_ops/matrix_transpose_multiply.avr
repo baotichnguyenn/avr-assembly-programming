@@ -1,0 +1,170 @@
+.section .data
+A: 	.byte 1,2,3,  4,2,6,  7,2,7
+B: 	.byte 9,8,7,  6,5,7,  3,2,1
+A_T: 	.space 9
+B_T: 	.space 9
+C: 	.space 9
+
+.section .text
+.global asm_function
+asm_function:
+	ldi r18, lo8(A_T)	;; transpose(A, A_T)
+	push r18
+	ldi r18, hi8(A_T)
+	push r18
+	ldi r18, lo8(A)
+	push r18
+	ldi r18, hi8(A)
+	push r18
+	call transpose
+	pop r18
+	pop r18
+	pop r18
+	pop r18
+	ldi r18, lo8(B_T)	;; transpose(B, B_T)
+	push r18
+	ldi r18, hi8(B_T)
+	push r18
+	ldi r18, lo8(B)
+	push r18
+	ldi r18, hi8(B)
+	push r18
+	call transpose
+	pop r18
+	pop r18
+	pop r18
+	pop r18
+	ldi r18, lo8(C) 	;; multiply(A_T, B_T, C)
+	push r18
+	ldi r18, hi8(C)
+	push r18
+	ldi r18, lo8(A_T)
+	push r18
+	ldi r18, hi8(A_T)
+	push r18
+	ldi r18, lo8(B_T)
+	push r18
+	ldi r18, hi8(B_T)
+	push r18
+	call multiply
+	pop r18
+	pop r18
+	pop r18
+	pop r18
+	pop r18
+	pop r18
+	ret
+
+;; multiply(X=A_T, Y=B_T, out=C)
+;; Frame: Z+3/4 = B_T hi/lo, Z+5/6 = A_T hi/lo, Z+7/8 = C hi/lo
+;;   Y (r29:r28) = A_T base     X (r27:r26) = B_T base
+;;   r13:r12     = C write pointer (moves forward)
+;;   r23 = i, r24 = j, r25 = k, r20 = 3, r22 = 0, r21 = cell
+multiply:
+	in r30, 0x3d		;; Z = SP
+	in r31, 0x3e
+	ldd r27, Z+3		;; X = B_T
+	ldd r26, Z+4
+	ldd r29, Z+5		;; Y = A_T
+	ldd r28, Z+6
+	ldd r13, Z+7		;; r13:r12 = C
+	ldd r12, Z+8
+	clr r22			;; zero for adc
+	ldi r20, 3		;; row length
+	clr r23			;; i = 0
+
+multiply_outer:			;; for i in range(3)
+	cp r23, r20
+	brsh multiply_done
+	clr r24			;; j = 0
+
+multiply_inner_j:		;; for j in range(3)
+	cp r24, r20
+	brsh multiply_inner_j_done
+	clr r25			;; k = 0
+	clr r21			;; cell = 0
+
+multiply_inner_k:		;; for k in range(3)
+	cp r25, r20
+	brsh multiply_inner_k_done
+
+	mov r19, r23		;; r19 = i*3 + k
+	mul r19, r20
+	mov r19, r0
+	add r19, r25
+	movw r30, r28		;; Z = &A_T[i][k]
+	add r30, r19
+	adc r31, r22
+	ld r18, Z		;; r18 = A_T[i][k]
+
+	mov r19, r25		;; r19 = k*3 + j
+	mul r19, r20
+	mov r19, r0
+	add r19, r24
+	movw r30, r26		;; Z = &B_T[k][j]
+	add r30, r19
+	adc r31, r22
+	ld r17, Z		;; r17 = B_T[k][j]
+
+	mul r18, r17		;; r0 = A_T[i][k] * B_T[k][j]
+	add r21, r0		;; cell += product
+	clr r1			;; mul overwrote r1
+
+	inc r25			;; k += 1
+	rjmp multiply_inner_k
+
+multiply_inner_k_done:		;; C[i][j] = cell
+	mov  r30, r12		;; Z = C write pointer (low)
+	mov  r31, r13		;;                     (high)
+	st   Z+, r21		;; store cell, Z moves to next slot
+	mov  r12, r30		;; save moved pointer (low)
+	mov  r13, r31		;;                    (high)
+	inc  r24		;; j += 1
+	rjmp multiply_inner_j
+
+multiply_inner_j_done:
+	inc r23			;; i += 1
+	rjmp multiply_outer
+
+multiply_done:
+	ret
+
+transpose:	
+	in r30, 0x3d		;; Z = SP
+	in r31, 0x3e
+	ldd r28, Z+4		;; Y = source
+	ldd r29, Z+3
+	ldd r26, Z+6		;; X = destination
+	ldd r27, Z+5
+	clr r23			;; i = 0
+	clr r25			;; zero for adc
+	ldi r20, 3
+
+outer:				;; for i in range(3)
+	cp r23, r20
+	brsh done
+	clr r24			;; j = 0
+
+inner:				;; for j in range(3)
+	cp r24, r20
+	brsh inner_done
+	movw r30, r28		;; Z = &src[j][i]
+	mov r19, r24
+	mul r19, r20
+	mov r19, r0
+	clr r1
+	add r19, r23
+	add r30, r19
+	adc r31, r25	
+	ld r18, Z
+	st X+, r18		;; dst[i][j] = src[j][i]
+	inc r24
+	rjmp inner
+
+inner_done:
+	inc r23
+	rjmp outer
+		
+done:
+	ret
+.end
