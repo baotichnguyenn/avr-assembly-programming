@@ -1,0 +1,119 @@
+`````
+# Function for fibonacci
+def fib(n):
+
+    # Stop condition
+    if (n == 0):
+        return 0
+
+    # Stop condition
+    if (n == 1):
+        return 1
+    
+    # Stop condition
+    if (n == 2):
+        return 1
+
+    # Recursion function
+    return (fib(n - 1) + fib(n - 2))
+
+n1, n2, n3 = 8, 5, 4
+
+values = [fib(n1), fib(n2), fib(n3)]
+total = sum(values)
+
+``````
+
+
+.section .data
+a: .byte 8
+b: .byte 5
+c: .byte 4
+
+values: .space 3
+total: .space 1
+
+.section .text
+.global asm_function
+
+asm_function:
+	lds r18, a		;; values[0] = fib(a)
+	push r18		;; n
+	push r18		;; space for result
+	call fib
+	pop r18			;; result
+	pop r19			;; n (discard)
+	sts values, r18
+
+	lds r18, b		;; values[1] = fib(b)
+	push r18
+	push r18
+	call fib
+	pop r18
+	pop r19
+	sts values+1, r18
+
+	lds r18, c		;; values[2] = fib(c)
+	push r18
+	push r18
+	call fib
+	pop r18
+	pop r19
+	sts values+2, r18
+
+	lds r18, values		;; total = sum(values)
+	lds r19, values+1
+	add r18, r19
+	lds r19, values+2
+	add r18, r19
+	sts total, r18
+	ret
+
+fib:
+	in r30, 0x3d
+	in r31, 0x3e
+	ldd r18, Z+4
+	cpi r18, 0
+	breq zero
+	cpi r18, 3
+	brlo two_or_less
+
+
+	mov r20, r18	;; --- fib (n-1)
+	dec r20 	;; prepare n-1
+	push r20 	;; push n-1 to stack
+	push r20 	;; push space for result of n-1
+	call fib
+	pop r21		;; restore result of n-1 fib(n-1)
+	pop r22		;; restore n-1
+
+	dec r22		;; n-2
+	push r21 	;; push result of fib(n-1)
+	push r22	;; push n-2
+	push r22	;; push result space for n-2
+	call fib
+	pop r20		;; get result of fib(n-2)
+	pop r23		;; n-2
+	pop r24		;; restore fib(n-1)
+
+	add r20, r24
+	in r30, 0x3d
+	in r31, 0x3e
+	std Z+3, r20
+	ret
+
+two_or_less:
+	ldi r21, 1
+	std Z+3 r21
+	ret
+		
+zero:
+	ldi r19, 0
+	std Z+3, r19
+	ret
+
+ret
+
+.end
+
+
