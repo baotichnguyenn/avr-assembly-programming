@@ -1,0 +1,61 @@
+.section .data
+	array: .byte 10, 2, 5, 14, 9
+	array_len: .byte 5
+	result_max: .space 1
+                  
+.section .text
+.global asm_function
+
+asm_function:
+	ldi r28, lo8(array)	;; Y points to start of array
+	ldi r29, hi8(array)
+	lds r18, array_len
+	push r28 
+	push r29		;; push pointer to array[0]
+	push r18		;; push array len
+	push r18		;; space for result
+	call recursive_max
+	pop r20
+	pop r18			;; n
+	pop r18			;; hi
+	pop r18			;; lo
+	sts result_max, r20
+	ret
+	
+
+recursive_max:
+	in r30, 0x3d
+	in r31, 0x3e
+	ldd r19, Z+4	;; array len
+	ldd r26, Z+6	;; X -> array
+	ldd r27, Z+5
+	ld r20, X+	;; r20 holds array[0]
+	cpi r19, 1
+	breq base_case
+	dec r19		;; len-1
+	push r20	;; pushing array[0]
+	push r26	;; pushing X+1
+	push r27
+	push r19	;; pushing array length
+	push r19	;; space for result
+	call recursive_max
+	pop r22		;; result
+	pop r19     	; n-1
+	pop r27     	; hi
+	pop r26     	; lo
+	pop r20     	; arr[0]  <- restored
+	in r30, 0x3d
+	in r31, 0x3e
+	cp r20, r22
+	brlo update_max
+	std Z+3, r20
+	ret	
+
+update_max:
+	std Z+3, r22
+	ret
+base_case:
+	std Z+3, r20		;; one element: answer is arr[0]
+	ret
+
+.end
