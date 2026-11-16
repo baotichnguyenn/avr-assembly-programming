@@ -1,0 +1,180 @@
+.section .data
+array: .byte 5,2,8,3,7,4
+array_len: .byte 6
+temp: .space 8
+
+.section .text
+.global asm_function
+
+asm_function:
+	ldi r28, lo8(array)	;; merge_sort(array, len)
+	push r28		;; arr lo
+	ldi r29, hi8(array)
+	push r29		;; arr hi
+	lds r18, array_len
+	push r18		;; n
+	call merge_sort
+	pop r18			;; 3 pushes -> 3 pops
+	pop r18
+	pop r18
+	ret
+
+;; ------------------------------------------------------------
+;; merge_sort(arr, n)  -- sorts arr[0..n) in place, returns nothing
+;; Frame: Z+3 = n, Z+4 = arr hi, Z+5 = arr lo
+;; Registers: r18 = n, r19 = mid, r20 = n - mid, X = arr, r1 = 0
+;; After each call I need arr, n, mid -> re-read Z, ldd, lsr
+;; ------------------------------------------------------------
+merge_sort:
+	in r30, 0x3d
+	in r31, 0x3e
+	clr r1			;; zero register
+	ldd r18, Z+3		;; n
+	cpi r18, 2		;; if n <= 1: already sorted
+	brlo done
+
+	;; ---- left: merge_sort(arr, mid) ----
+	mov r19, r18
+	lsr r19			;; mid = n // 2
+	ldd r26, Z+5		;; X = arr
+	ldd r27, Z+4
+	push r26		;; arr lo
+	push r27		;; arr hi
+	push r19		;; mid
+	call merge_sort
+	pop r0
+	pop r0
+	pop r0
+
+	;; ---- re-read my frame ----
+	in r30, 0x3d
+	in r31, 0x3e
+	ldd r18, Z+3		;; n
+	ldd r27, Z+4		;; arr hi
+	ldd r26, Z+5		;; arr lo
+	mov r19, r18
+	lsr r19			;; mid
+
+	;; ---- right: merge_sort(arr + mid, n - mid) ----
+	add r26, r19		;; X = arr + mid
+	adc r27, r1
+	push r26		;; (arr+mid) lo
+	push r27		;; (arr+mid) hi
+	mov r20, r18
+	sub r20, r19		;; n - mid
+	push r20
+	call merge_sort
+	pop r0
+	pop r0
+	pop r0
+
+	;; ---- re-read my frame ----
+	in r30, 0x3d
+	in r31, 0x3e
+	ldd r18, Z+3		;; n
+	ldd r27, Z+4		;; arr hi
+	ldd r26, Z+5		;; arr lo
+	mov r19, r18
+	lsr r19			;; mid
+
+	;; ---- merge(arr, mid, n) ----
+	push r26		;; arr lo
+	push r27		;; arr hi
+	push r19		;; mid
+	push r18		;; n
+	call merge
+	pop r0			;; 4 pushes -> 4 pops
+	pop r0
+	pop r0
+	pop r0
+done:
+	ret
+
+;; ------------------------------------------------------------
+;; merge(arr, mid, n) -- arr[0..mid) and arr[mid..n) are sorted
+;; Frame: Z+3 = n, Z+4 = mid, Z+5 = arr hi, Z+6 = arr lo
+;; Registers:
+;;   X = arr base (fixed)   Y = reads arr[i] / arr[j]
+;;   Z = temp write pointer (st Z+)
+;;   r21 = i, r24 = j, r25 = mid, r23 = n, r1 = 0
+;;   r16 = arr[i], r17 = arr[j]
+;; ------------------------------------------------------------
+merge:
+	in r30, 0x3d
+	in r31, 0x3e
+	ldd r23, Z+3		;; n
+	ldd r25, Z+4		;; mid
+	ldd r27, Z+5		;; X = arr
+	ldd r26, Z+6
+	ldi r30, lo8(temp)	;; Z = temp (frame no longer needed)
+	ldi r31, hi8(temp)
+	clr r1
+	clr r21			;; i = 0
+	mov r24, r25		;; j = mid
+
+both_left:			;; while i < mid and j < n
+	cp r21, r25
+	brsh left_over
+	cp r24, r23
+	brsh left_over
+
+	mov r28, r26		;; Y = &arr[i]
+	mov r29, r27
+	add r28, r21
+	adc r29, r1
+	ld r16, Y		;; r16 = arr[i]
+
+	mov r28, r26		;; Y = &arr[j]
+	mov r29, r27
+	add r28, r24
+	adc r29, r1
+	ld r17, Y		;; r17 = arr[j]
+
+	cp r17, r16		;; if arr[i] <= arr[j]
+	brlo take_j		;;   (opposite: arr[j] < arr[i])
+	st Z+, r16		;;   temp[k++] = arr[i]
+	inc r21			;;   i += 1
+	rjmp both_left
+take_j:
+	st Z+, r17		;; temp[k++] = arr[j]
+	inc r24			;; j += 1
+	rjmp both_left
+
+left_over:			;; while i < mid: temp[k++] = arr[i++]
+	cp r21, r25
+	brsh right_over
+	mov r28, r26
+	mov r29, r27
+	add r28, r21
+	adc r29, r1
+	ld r16, Y
+	st Z+, r16
+	inc r21
+	rjmp left_over
+
+right_over:			;; while j < n: temp[k++] = arr[j++]
+	cp r24, r23
+	brsh copy_back_init
+	mov r28, r26
+	mov r29, r27
+	add r28, r24
+	adc r29, r1
+	ld r17, Y
+	st Z+, r17
+	inc r24
+	rjmp right_over
+
+copy_back_init:			;; for k in range(n): arr[k] = temp[k]
+	ldi r30, lo8(temp)	;; Z = temp again
+	ldi r31, hi8(temp)
+	clr r22			;; k = 0
+copy_back:
+	cp r22, r23
+	brsh merge_done
+	ld r16, Z+		;; r16 = temp[k]
+	st X+, r16		;; arr[k] = r16
+	inc r22
+	rjmp copy_back
+merge_done:
+	ret
+.end
