@@ -1,0 +1,79 @@
+.section .data
+	array: .byte 5, 12, 3, 20, 8, 15
+	array_len: .byte 6
+	threshold: .byte 7
+	total: .space 1
+
+.section .text
+.global asm_function
+
+asm_function:
+	ldi r28, lo8(array)	;; push lo(array)
+	push r28
+	ldi r29, hi8(array)	;; push hi(array)
+	push r29
+	lds r21, array_len
+	push r21		;; push len
+	lds r20, threshold
+	push r20		;; push threshold k
+	push r20		;; push space for result
+	call count_greater
+	pop r20			;; r20 holds total
+	pop r0
+	pop r0
+	pop r0
+	pop r0
+	sts total, r20
+	ret
+
+count_greater:
+	in r30, 0x3d
+	in r31, 0x3e
+	ldd r17, Z+5 		;; r17 holds len
+	cpi r17, 0
+	breq base_case
+	ldd r26, Z+7		;; X points to array
+	ldd r27, Z+6
+	ld r19, X+		;; r19 holds X[0] then inc X
+	ldd r16, Z+4		;; r16 holds threshold k
+	
+	push r26		;; push lo(array+1)
+	push r27		;; push hi(array+1)
+	dec r17
+	push r17		;; push len -1
+	push r16		;; push k
+	push r16		;; push space for result
+	call count_greater
+
+	in r30, 0x3d		;; RE-READ Z: the deeper calls changed it
+	in r31, 0x3e
+	pop r24			;; r24 stores result from recursion
+	pop r0
+	pop r0
+	pop r0
+	pop r0
+	in r30, 0x3d		;; RE-READ Z: the deeper calls changed it
+	in r31, 0x3e
+	ldd r26, Z+7		;; reload a[0] and k: the deeper calls changed r16 and r19
+	ldd r27, Z+6
+	ld r19, X
+	ldd r16, Z+4
+	cp r16, r19		;; k - a[0]
+	brsh lower		;; k >= a[0] -> don't count
+	inc r24
+lower:
+	std Z+3, r24
+	ret
+base_case:
+	ldi r18, 0
+	std Z+3, r18
+	ret
+
+	
+
+
+
+
+ret
+
+.end
