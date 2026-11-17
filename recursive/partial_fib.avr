@@ -1,0 +1,115 @@
+.section .data	
+	array: .byte 5,6, 0, 0, 0, 0, 0, 0, 0
+	seq_len: .byte 9
+	max_val: .space 1
+
+.section .text
+.global asm_function
+
+asm_function:
+	ldi r28, lo8(array)
+	push r28		;; push lo(array)
+	ldi r29, hi8(array)
+	push r29		;; push hi(array)
+	ld r20, Y+
+	push r20		;; push arr[0] (start1)
+	ld r21, Y
+	push r21		;; push arr[1] (start2)
+	lds r16, seq_len	;; r16 = len
+	mov r17, r16
+	dec r17			;; r17 = len-1 (index of last element)
+	push r17		;; push idx
+	push r17		;; push space for result
+	call partial_fib
+	pop r20			;; r20 = result (max_val)
+	pop r0			;; idx
+	pop r0			;; start2
+	pop r0			;; start1
+	pop r0			;; hi
+	pop r0			;; lo
+	sts max_val, r20	;; store result in DMEM
+	ret
+
+;; partial_fib(arr, start1, start2, idx)
+;; Frame: Z+3 = result, Z+4 = idx, Z+5 = start2, Z+6 = start1,
+;;        Z+7 = arr hi, Z+8 = arr lo
+;; Note: r15, r16, r22, r23 hold the same values at every level
+;;       (array base and the two start numbers), so they are safe
+;;       to reuse after a call even though deeper levels rewrite them.
+partial_fib:
+	clr r1			;; zero register
+	in r30, 0x3d		;; Z -> SP
+	in r31, 0x3e		
+	ldd r19, Z+4		;; r19 = idx
+	ldd r22, Z+5		;; r22 = start2
+	ldd r23, Z+6		;; r23 = start1
+	ldd r26, Z+8		;; X = arr
+	ldd r27, Z+7
+	mov r15, r26		;; keep a copy of arr base
+	mov r16, r27
+	add r26, r19		;; X = &arr[idx]
+	adc r27, r1
+	ld r24, X		;; r24 = arr[idx]  (*num)
+
+	cp r24, r23		;; if *num == start1
+	breq base_case_n0
+	cp r24, r22		;; if *num == start2
+	breq base_case_n1
+
+	;; ---- res1 = partial_fib(idx - 1) ----
+	dec r19			;; idx - 1
+	push r15		;; arr lo
+	push r16		;; arr hi
+	push r23		;; start1
+	push r22		;; start2
+	push r19		;; idx - 1
+	push r19		;; space for result
+	call partial_fib
+	pop r10			;; r10 = res1
+	pop r0
+	pop r0
+	pop r0	
+	pop r0
+	pop r0	
+
+	;; ---- res2 = partial_fib(idx - 2) ----
+	in r30, 0x3d		;; Z = my frame again
+	in r31, 0x3e		
+	ldd r19, Z+4		;; my idx
+	subi r19, 2		;; idx - 2
+	push r10		;; SAVE res1 underneath
+	push r15		;; arr lo
+	push r16		;; arr hi
+	push r23		;; start1
+	push r22		;; start2
+	push r19		;; idx - 2
+	push r19		;; space for result
+	call partial_fib
+	pop r11			;; r11 = res2
+	pop r0
+	pop r0
+	pop r0	
+	pop r0
+	pop r0	
+	pop r10			;; r10 = res1 restored
+
+	;; ---- *num = res1 + res2 ; return *num ----
+	add r10, r11		;; sum
+	in r30, 0x3d		;; Z = my frame again
+	in r31, 0x3e	
+	ldd r19, Z+4		;; my idx
+	ldd r26, Z+8		;; X = arr
+	ldd r27, Z+7
+	add r26, r19		;; X = &arr[idx]
+	adc r27, r1
+	st X, r10		;; arr[idx] = sum
+	std Z+3, r10		;; return sum
+	ret
+			
+base_case_n0:
+	std Z+3, r23		;; return start1
+	ret
+base_case_n1:
+	std Z+3, r22		;; return start2
+	ret	
+.end
